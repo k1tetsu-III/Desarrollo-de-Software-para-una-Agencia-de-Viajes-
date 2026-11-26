@@ -1,102 +1,96 @@
 from dominio.usuario import Usuario
 from persistencia.conexion import conexion_segura, marcador_sql
 
-_COLUMNAS = "id, empleado_id, nombre_usuario, password, rol"
+_COLUMNAS = "id, full_name, email, password_hash, role, created_at"
+
 
 class UsuarioDAO:
-
     @staticmethod
-    def _fila_a_usuario(fila):
+    def _mapear_fila(fila) -> Usuario:
         return Usuario(
             id=fila[0],
-            empleado_id=fila[1],
-            nombre_usuario=fila[2],
+            full_name=fila[1],
+            email=fila[2],
             password_hash=fila[3],
-            rol=fila[4]
+            role=fila[4],
+            created_at=fila[5],
         )
 
-    @staticmethod
-    def insertar(usuario):
+    @classmethod
+    def insertar(cls, usuario: Usuario) -> Usuario:
         if not Usuario.es_hash_bcrypt(usuario.password_hash):
             raise ValueError("Solo se pueden guardar contraseñas con hash bcrypt.")
-        marca = marcador_sql()
+        p = marcador_sql()
+        sql = f"""
+            INSERT INTO users (full_name, email, password_hash, role)
+            VALUES ({p}, {p}, {p}, {p})
+        """
+        parametros = (
+            usuario.full_name,
+            usuario.email,
+            usuario.password_hash,
+            usuario.role,
+        )
         with conexion_segura() as conexion:
             cursor = conexion.cursor()
-            sql = f"""
-                INSERT INTO usuario (empleado_id, nombre_usuario, password, rol)
-                VALUES ({marca}, {marca}, {marca}, {marca})
-            """
-            cursor.execute(sql, (
-                usuario.empleado_id,
-                usuario.nombre_usuario,
-                usuario.password_hash,
-                usuario.rol
-            ))
-            usuario.id = cursor.lastrowid
-        return usuario
+            try:
+                cursor.execute(sql, parametros)
+                usuario.id = cursor.lastrowid
+                return usuario
+            finally:
+                cursor.close()
 
-    @staticmethod
-    def buscar_por_nombre_usuario(nombre_usuario):
-        marca = marcador_sql()
+    @classmethod
+    def buscar_por_email(cls, email: str) -> Usuario | None:
+        p = marcador_sql()
+        sql = f"SELECT {_COLUMNAS} FROM users WHERE email = {p}"
         with conexion_segura() as conexion:
             cursor = conexion.cursor()
-            cursor.execute(f"SELECT {_COLUMNAS} FROM usuario WHERE nombre_usuario = {marca}", (nombre_usuario,))
-            fila = cursor.fetchone()
-        return None if fila is None else UsuarioDAO._fila_a_usuario(fila)
+            try:
+                cursor.execute(sql, (email.strip().lower(),))
+                fila = cursor.fetchone()
+                return cls._mapear_fila(fila) if fila else None
+            finally:
+                cursor.close()
 
-    @staticmethod
-    def buscar_por_empleado_id(empleado_id):
-        marca = marcador_sql()
+    @classmethod
+    def buscar_por_id(cls, usuario_id: int) -> Usuario | None:
+        p = marcador_sql()
+        sql = f"SELECT {_COLUMNAS} FROM users WHERE id = {p}"
         with conexion_segura() as conexion:
             cursor = conexion.cursor()
-            cursor.execute(f"SELECT {_COLUMNAS} FROM usuario WHERE empleado_id = {marca}", (empleado_id,))
-            fila = cursor.fetchone()
-        return None if fila is None else UsuarioDAO._fila_a_usuario(fila)
+            try:
+                cursor.execute(sql, (usuario_id,))
+                fila = cursor.fetchone()
+                return cls._mapear_fila(fila) if fila else None
+            finally:
+                cursor.close()
 
-    @staticmethod
-    def listar():
+    @classmethod
+    def listar(cls) -> list[Usuario]:
+        sql = f"SELECT {_COLUMNAS} FROM users ORDER BY id ASC"
         with conexion_segura() as conexion:
             cursor = conexion.cursor()
-            cursor.execute(f"SELECT {_COLUMNAS} FROM usuario ORDER BY id")
-            filas = cursor.fetchall()
-        return [UsuarioDAO._fila_a_usuario(f) for f in filas]
+            try:
+                cursor.execute(sql)
+                return [cls._mapear_fila(fila) for fila in cursor.fetchall()]
+            finally:
+                cursor.close()
 
-    @staticmethod
-    def actualizar(usuario):
-        if not Usuario.es_hash_bcrypt(usuario.password_hash):
-            raise ValueError("Solo se pueden guardar contraseñas con hash bcrypt.")
-        marca = marcador_sql()
-        with conexion_segura() as conexion:
-            cursor = conexion.cursor()
-            cursor.execute(
-                f"""UPDATE usuario 
-                    SET nombre_usuario = {marca}, password = {marca}, rol = {marca} 
-                    WHERE id = {marca}""",
-                (usuario.nombre_usuario, usuario.password_hash, usuario.rol, usuario.id),
-            )
-            filas_afectadas = cursor.rowcount
-        return filas_afectadas > 0
-
-    @staticmethod
-    def actualizar_password_hash(id_usuario, hash_actual, hash_nuevo):
+    @classmethod
+    def actualizar_password_hash(cls, usuario_id: int, hash_actual: str, hash_nuevo: str) -> bool:
         if not Usuario.es_hash_bcrypt(hash_nuevo):
-            raise ValueError("La nueva contraseña debe tener un hash bcrypt.")
-        marca = marcador_sql()
+            raise ValueError("La nueva contraseña debe tener un hash bcrypt válido.")
+        p = marcador_sql()
+        sql = f"""
+            UPDATE users
+            SET password_hash = {p}
+            WHERE id = {p} AND password_hash = {p}
+        """
         with conexion_segura() as conexion:
             cursor = conexion.cursor()
-            cursor.execute(
-                f"UPDATE usuario SET password = {marca} "
-                f"WHERE id = {marca} AND password = {marca}",
-                (hash_nuevo, id_usuario, hash_actual),
-            )
-            filas_afectadas = cursor.rowcount
-        return filas_afectadas > 0
-
-    @staticmethod
-    def eliminar(id_usuario):
-        marca = marcador_sql()
-        with conexion_segura() as conexion:
-            cursor = conexion.cursor()
-            cursor.execute(f"DELETE FROM usuario WHERE id = {marca}", (id_usuario,))
-            filas_afectadas = cursor.rowcount
-        return filas_afectadas > 0
+            try:
+                cursor.execute(sql, (hash_nuevo, usuario_id, hash_actual))
+                return cursor.rowcount > 0
+            finally:
+                cursor.close()

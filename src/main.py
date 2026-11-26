@@ -1,28 +1,28 @@
 import logging
 
-from persistencia.conexion import ERRORES_BD, ErrorConfiguracion
+from menu_destinos import menu_destinos
+from menu_paquetes import menu_paquetes
+from menu_reservas import menu_reservas_admin, menu_reservas_cliente
+from menu_usuario import solicitar_login, solicitar_registro_cliente
+from persistencia.conexion import ERRORES_BD, ErrorConfiguracion, obtener_motor
 from persistencia.crear_bd import crear_tablas
-from menu_usuario import solicitar_login, solicitar_registro, menu_privado
-from menu_empleado import menu_empleado
-from menu_departamento import menu_departamento
-from menu_proyecto import menu_proyecto
-from menu_registrotiempo import menu_registrotiempo
+from servicios.gestion_destinos import listar_destinos
+from servicios.gestion_paquetes import listar_paquetes, listar_salidas_disponibles
 
-def preparar_base_de_datos():
-    """Crea las tablas. Devuelve False si la base de datos no está disponible."""
+
+def preparar_base_de_datos() -> bool:
     try:
         crear_tablas()
         return True
     except ErrorConfiguracion as error:
         print(f"Error de configuración: {error}. Revise el archivo .env.")
     except ERRORES_BD:
-        logging.getLogger("ecotech").exception("No se pudo preparar la base de datos")
+        logging.getLogger("viajes_aventura").exception("No se pudo preparar la BD")
         print("No fue posible conectar con la base de datos. Revise el archivo .env.")
     return False
 
 
-def solicitar_opcion(max_opcion):
-    """Solicita y valida una opción numérica del menú."""
+def solicitar_opcion(max_opcion: int) -> int | None:
     try:
         opcion = int(input(f"Seleccione una opción (0-{max_opcion}): "))
         if 0 <= opcion <= max_opcion:
@@ -33,46 +33,72 @@ def solicitar_opcion(max_opcion):
     return None
 
 
-def mostrar_menu():
-    print("\n=== SISTEMA ECOTECH ===")
-    print("1. Menú Empleados")
-    print("2. Menú Departamentos")
-    print("3. Menú Proyectos")
-    print("4. Menú Registros de Tiempo")
-    print("5. Crear cuenta para un empleado")
-    print("0. Salir")
-
-
-def flujo_principal(usuario_actual):
-    """Maneja el ciclo principal de menús del sistema."""
-    rol = usuario_actual.get("rol")
-    if rol == "empleado":
-        return menu_privado(usuario_actual) == "0"
-    if rol != "admin":
-        raise PermissionError("El rol de la sesión no es válido.")
-
-    menus = {
-        1: menu_empleado,
-        2: menu_departamento,
-        3: menu_proyecto,
-        4: menu_registrotiempo,
-    }
-
+def flujo_admin(usuario_actual: dict) -> bool:
     while True:
-        mostrar_menu()
-        opcion = solicitar_opcion(5)
-        if opcion == 0:
-            print("Programa finalizado.")
+        print(f"\n=== VIAJES AVENTURA [ADMIN] ({obtener_motor().upper()}) ===")
+        print("1. Gestión de Destinos (CRUD)")
+        print("2. Gestión de Paquetes Turísticos y Salidas (CRUD)")
+        print("3. Gestión de Reservas, Pasajeros y Seguimiento (CRUD)")
+        print("9. Cerrar sesión")
+        print("0. Salir del programa")
+
+        opcion = input("Opción: ").strip()
+        if opcion == "0":
             return True
-        elif opcion in menus:
-            menus[opcion]()
-        elif opcion == 5:
-            solicitar_registro(usuario_actual)
+        if opcion == "9":
+            return False
+        if opcion == "1":
+            menu_destinos(usuario_actual)
+        elif opcion == "2":
+            menu_paquetes(usuario_actual)
+        elif opcion == "3":
+            menu_reservas_admin(usuario_actual)
+        else:
+            print("Opción no válida.")
+
+
+def flujo_cliente(usuario_actual: dict) -> bool:
+    while True:
+        print(f"\n=== VIAJES AVENTURA [CLIENTE] ({obtener_motor().upper()}) ===")
+        print("1. Ver destinos disponibles")
+        print("2. Ver paquetes turísticos y salidas abiertas")
+        print("3. Mis reservas, pasajeros y avances de viaje")
+        print("9. Cerrar sesión")
+        print("0. Salir del programa")
+
+        opcion = input("Opción: ").strip()
+        if opcion == "0":
+            return True
+        if opcion == "9":
+            return False
+        if opcion == "1":
+            destinos = listar_destinos(usuario_actual, solo_activos=True)
+            if not destinos:
+                print("  No hay destinos disponibles.")
+            for d in destinos:
+                print(" ", d)
+        elif opcion == "2":
+            paquetes = listar_paquetes(usuario_actual, solo_activos=True)
+            if not paquetes:
+                print("  No hay paquetes activos disponibles.")
+            for pkg in paquetes:
+                print("\n ", pkg)
+                for parada in pkg.obtener_itinerario():
+                    print("  ", parada)
+            salidas = listar_salidas_disponibles(usuario_actual)
+            if salidas:
+                print("\n  Salidas abiertas con cupos:")
+                for s in salidas:
+                    print("   ->", s)
+        elif opcion == "3":
+            menu_reservas_cliente(usuario_actual)
+        else:
+            print("Opción no válida.")
 
 
 def main():
     logging.basicConfig(
-        filename="ecotech.log",
+        filename="viajes_aventura.log",
         level=logging.ERROR,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
@@ -80,27 +106,34 @@ def main():
     if not preparar_base_de_datos():
         return
 
-    # Autenticación al iniciar
     while True:
-        print("\n--- INICIO DE SESIÓN ---")
-        usuario_actual = solicitar_login()
-        
-        if usuario_actual is None:
-            if input("Presione Enter para reintentar o '0' para salir del programa: ").strip() == "0":
-                print("Programa finalizado.")
-                return
+        print(f"\n--- BIENVENIDO A VIAJES AVENTURA (Motor: {obtener_motor().upper()}) ---")
+        print("1. Iniciar sesión")
+        print("2. Registrarse como cliente")
+        print("0. Salir")
+
+        opcion = solicitar_opcion(2)
+        if opcion == 0:
+            print("Programa finalizado.")
+            return
+        if opcion == 2:
+            solicitar_registro_cliente()
+            continue
+        if opcion != 1:
             continue
 
-        # Si el usuario se autentica correctamente
-        print(
-            f"\nBienvenido/a, {usuario_actual['nombre_usuario']} "
-            f"(Rol: {usuario_actual['rol']})"
-        )
-        
-        # Los administradores gestionan los módulos; los empleados solo usan
-        # las opciones privadas de su cuenta.
-        salir = flujo_principal(usuario_actual)
+        usuario_actual = solicitar_login()
+        if usuario_actual is None:
+            continue
+
+        print(f"\nBienvenido/a, {usuario_actual['full_name']} (Rol: {usuario_actual['role']})")
+        if usuario_actual["role"] == "admin":
+            salir = flujo_admin(usuario_actual)
+        else:
+            salir = flujo_cliente(usuario_actual)
+
         if salir:
+            print("Programa finalizado.")
             return
         print("Sesión cerrada.")
 

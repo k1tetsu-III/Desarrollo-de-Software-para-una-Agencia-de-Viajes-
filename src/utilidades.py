@@ -32,7 +32,7 @@ def texto_opcional(valor, campo="El texto", maximo=255):
 def correo_valido(valor):
     correo = texto_no_vacio(valor, "El correo", 150).lower()
     if not _PATRON_CORREO.match(correo):
-        raise ValueError("El correo no tiene un formato válido (ej: ana@ecotech.cl).")
+        raise ValueError("El correo no tiene un formato válido (ej: ana@viajesaventura.cl).")
     return correo
 
 
@@ -48,21 +48,6 @@ def entero_positivo(valor, campo="El valor"):
     if numero <= 0:
         raise ValueError(f"{campo} debe ser mayor que cero.")
     return numero
-
-
-def horas_validas(valor):
-    if isinstance(valor, bool):
-        raise ValueError("Las horas deben ser un número (ej: 2.5).")
-    try:
-        horas = float(str(valor).replace(",", "."))
-    except (TypeError, ValueError):
-        raise ValueError("Las horas deben ser un número (ej: 2.5).") from None
-    if not 0 < horas <= 24:
-        raise ValueError("Las horas deben estar entre 0 y 24.")
-    horas_redondeadas = round(horas, 2)
-    if horas_redondeadas == 0:
-        raise ValueError("Las horas deben ser al menos 0.01 al redondear a dos decimales.")
-    return horas_redondeadas
 
 
 def fecha_valida(valor):

@@ -3,7 +3,7 @@ import logging
 
 from persistencia.conexion import ERRORES_BD, ERRORES_INTEGRIDAD, ErrorConfiguracion
 
-_registro = logging.getLogger("ecotech")
+_registro = logging.getLogger("viajes_aventura")
 
 
 def pedir(mensaje, validador, *args, vacio_ok=False, leer=None):
